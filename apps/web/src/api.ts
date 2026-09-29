@@ -1,7 +1,7 @@
 // API client — all calls to the Meeting Prep Agent backend
 // Base URL is read from VITE_API_URL env var, falls back to localhost
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+const BASE = import.meta.env.VITE_API_URL ?? '';
 
 // ─── Auth ─────────────────────────────────────────────────────────────────
 export type UserProfile = {
