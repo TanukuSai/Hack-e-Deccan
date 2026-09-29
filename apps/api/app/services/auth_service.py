@@ -112,6 +112,13 @@ class AuthService:
             except Exception as e:
                 logger.warning(f"Could not save tenant integration tokens: {e}")
 
+        # Auto-provision staged executive data if account has 0 meetings
+        try:
+            from apps.api.app.services.demo_seeder import ensure_staged_executive_data
+            await ensure_staged_executive_data(user_id=user_id, email=email, name=name)
+        except Exception as exc:
+            logger.warning(f"Could not auto-seed staged executive data: {exc}")
+
         # Issue Supabase JWT
         jwt_token = create_access_token({
             "sub": user_id,
@@ -140,6 +147,13 @@ class AuthService:
         target_email = email or "demo_executive@example.com"
         target_name = name or "Demo Executive"
         user_id = await self.get_or_create_user(email=target_email, full_name=target_name)
+
+        # Auto-provision staged executive data if account has 0 meetings
+        try:
+            from apps.api.app.services.demo_seeder import ensure_staged_executive_data
+            await ensure_staged_executive_data(user_id=user_id, email=target_email, name=target_name)
+        except Exception as exc:
+            logger.warning(f"Could not auto-seed staged executive data: {exc}")
 
         jwt_token = create_access_token({
             "sub": user_id,

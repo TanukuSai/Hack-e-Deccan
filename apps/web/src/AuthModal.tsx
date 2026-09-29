@@ -1,14 +1,11 @@
 import { useState } from 'react';
-import { authApi, setToken } from './api';
-import { useApp, useToast } from './store';
+import { authApi } from './api';
+import { useToast } from './store';
 
 export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
-  const { dispatch } = useApp();
   const toast = useToast();
   const [includeCalendar, setIncludeCalendar] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [devEmail, setDevEmail] = useState('');
-  const [showDevCustom, setShowDevCustom] = useState(false);
   const [showOAuthHelp, setShowOAuthHelp] = useState(false);
 
   const activeRedirectUri = `${window.location.origin}/auth/google/callback`;
@@ -42,36 +39,6 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
       }
       const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes.join(' '))}&access_type=offline&prompt=consent&state=${state}`;
       window.location.href = authUrl;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDevLogin = async (customEmail?: string) => {
-    setLoading(true);
-    try {
-      const res = await authApi.devLogin(
-        customEmail || 'alex.mercer@executive.ai',
-        customEmail ? customEmail.split('@')[0] : 'Alex Mercer'
-      );
-      setToken(res.access_token);
-      dispatch({ type: 'LOGIN', user: res.user });
-      toast(`Signed in as ${res.user.email}`, 'success', '✓');
-      if (onDismiss) onDismiss();
-    } catch {
-      // Local fallback for offline mode
-      const dummyUser = {
-        id: '12194ecc-c581-4a81-a7ef-9bea2e8bcd58',
-        email: customEmail || 'alex.mercer@executive.ai',
-        full_name: 'Alex Mercer (Executive)',
-        account_status: 'active',
-        monthly_budget_usd: 25.0,
-        current_month_spend_usd: 1.45,
-      };
-      setToken('dev-fallback-token');
-      dispatch({ type: 'LOGIN', user: dummyUser });
-      toast('Signed in (Local Demo Session)', 'success', '✓');
-      if (onDismiss) onDismiss();
     } finally {
       setLoading(false);
     }
@@ -225,102 +192,78 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
             {loading ? 'Connecting...' : 'Sign in with Google'}
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '2px 0' }}>
-            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              instant test sign-in
-            </span>
-            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          {/* Privacy & Governance Notice */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            marginTop: 4,
+          }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+              🛡️ Enterprise Compliance Guardrails
+            </div>
+            <div>
+              Strict Draft-Only invariant enforced for all communications. Two-Party Consent legally required for live attendance and transcription.
+            </div>
           </div>
 
-          <button
-            className="btn btn-ghost"
-            onClick={() => handleDevLogin()}
-            disabled={loading}
-            style={{
-              padding: '10px 16px',
-              fontSize: 13,
-              fontWeight: 600,
-              background: 'rgba(255, 255, 255, 0.04)',
-            }}
-          >
-            ⚡ One-Click Demo Executive Login (Alex Mercer)
-          </button>
-
-          {!showDevCustom ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button
-                className="btn btn-ghost"
-                onClick={() => setShowDevCustom(true)}
-                style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 4px' }}
-              >
-                Custom test email…
-              </button>
-              <button
-                className="btn btn-ghost"
-                onClick={() => setShowOAuthHelp(v => !v)}
-                style={{ fontSize: 11, color: 'var(--indigo)', padding: '2px 4px' }}
-              >
-                {showOAuthHelp ? 'Hide OAuth Help ▲' : 'OAuth Error Troubleshooting ▼'}
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              <input
-                type="email"
-                placeholder="your-test-email@example.com"
-                value={devEmail}
-                onChange={e => setDevEmail(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: '6px 10px',
-                  background: 'var(--surface-input)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6,
-                  color: 'var(--text-primary)',
-                  fontSize: 12,
-                }}
-              />
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => handleDevLogin(devEmail)}
-                disabled={!devEmail.includes('@')}
-              >
-                Go
-              </button>
-            </div>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setShowOAuthHelp(v => !v)}
+              style={{ fontSize: 11, color: 'var(--indigo)', padding: '2px 4px' }}
+            >
+              {showOAuthHelp ? 'Hide Google Cloud Guide ▲' : 'Google OAuth Configuration Guide ▼'}
+            </button>
+          </div>
 
           {/* OAuth Troubleshooting & Redirect URI Info */}
           {showOAuthHelp && (
             <div style={{
-              background: 'rgba(239, 68, 68, 0.06)',
+              background: 'rgba(239, 68, 68, 0.05)',
               border: '1px solid rgba(239, 68, 68, 0.25)',
               borderRadius: 8,
-              padding: '10px 12px',
+              padding: '12px 14px',
               fontSize: 11,
-              marginTop: 4,
+              marginTop: 6,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
             }}>
-              <div style={{ fontWeight: 700, color: 'var(--rose)', marginBottom: 4 }}>
-                Resolving Error 400: redirect_uri_mismatch
+              <div>
+                <strong style={{ color: 'var(--rose)', display: 'block', marginBottom: 2 }}>
+                  1. Fix "Error 403: access_denied" (App in Testing Mode)
+                </strong>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Google Cloud blocks unapproved accounts when the OAuth consent screen is unpublished. To allow <code>saitanuku81@gmail.com</code> and <code>saitanuku460@gmail.com</code>:
+                </span>
+                <ol style={{ paddingLeft: 18, margin: '4px 0', color: 'var(--text-muted)' }}>
+                  <li>Open <a href="https://console.cloud.google.com/apis/credentials/consent?project=neuro-play-a2c9ny" target="_blank" rel="noreferrer" style={{ color: 'var(--indigo)', textDecoration: 'underline' }}>Google Cloud OAuth Consent Screen</a></li>
+                  <li>Scroll down to <strong>Test users</strong> and click <strong>+ ADD USERS</strong></li>
+                  <li>Add <code>saitanuku81@gmail.com</code> &amp; <code>saitanuku460@gmail.com</code> and click <strong>Save</strong>.</li>
+                </ol>
               </div>
-              <div style={{ color: 'var(--text-secondary)', marginBottom: 6 }}>
-                Google blocks OAuth requests if the exact redirect URL isn't pre-registered in Google Cloud Console.
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.3)', padding: '6px 8px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 10 }}>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeRedirectUri}</span>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={handleCopyUri}
-                  style={{ fontSize: 10, padding: '2px 6px', color: 'var(--primary)' }}
-                >
-                  Copy
-                </button>
-              </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 10, marginTop: 6 }}>
-                1. Go to Google Cloud Console → APIs & Services → Credentials.<br/>
-                2. Click your OAuth 2.0 Web Client ID.<br/>
-                3. Under <strong>Authorized redirect URIs</strong>, add <code>{activeRedirectUri}</code> and save.
+
+              <div>
+                <strong style={{ color: 'var(--warning)', display: 'block', marginBottom: 2 }}>
+                  2. Fix "Error 400: redirect_uri_mismatch"
+                </strong>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Ensure your authorized redirect URI in Google Cloud Credentials includes:
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.3)', padding: '5px 8px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 10, marginTop: 4 }}>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeRedirectUri}</span>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={handleCopyUri}
+                    style={{ fontSize: 10, padding: '2px 6px', color: 'var(--primary)' }}
+                  >
+                    Copy
+                  </button>
+                </div>
               </div>
             </div>
           )}

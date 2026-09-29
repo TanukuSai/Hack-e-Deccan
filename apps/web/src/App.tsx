@@ -15,6 +15,8 @@ import IntelligencePage from './pages/IntelligencePage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import SettingsPage    from './pages/SettingsPage';
 
+import WelcomeLoginPage from './pages/WelcomeLoginPage';
+
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   chat:         { title: 'Agent Chat',          subtitle: 'Contextual Executive Sparring & Pre-Meeting Advisory' },
   dashboard:    { title: 'Executive Command',   subtitle: 'Daily Operating Context & Action Triage' },
@@ -41,7 +43,7 @@ function Router() {
     case 'intelligence': return <IntelligencePage />;
     case 'integrations': return <IntegrationsPage />;
     case 'settings':     return <SettingsPage />;
-    default:             return <ChatPage />;
+    default:             return <DashboardPage />;
   }
 }
 
@@ -75,6 +77,16 @@ function Shell() {
         });
     }
   }, [dispatch, toast]);
+
+  // If unauthenticated, first page is the full-screen Sign In / Welcome page
+  if (!state.isAuthenticated || !state.user) {
+    return (
+      <>
+        <WelcomeLoginPage />
+        <ToastArea />
+      </>
+    );
+  }
 
   const currentMeta = PAGE_META[state.page] || { title: 'Executive Assistant', subtitle: 'Autonomous Meeting Intelligence' };
 
