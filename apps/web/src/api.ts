@@ -106,8 +106,11 @@ export const meetingsApi = {
   get: (id: string) => api<Meeting>(`/api/v1/meetings/${id}`),
   create: (payload: Partial<Meeting>) =>
     api<Meeting>('/api/v1/meetings', { method: 'POST', body: JSON.stringify(payload) }),
-  analyzeOutcome: (id: string) =>
-    api(`/api/v1/meetings/${id}/analyze-outcome`, { method: 'POST' }),
+  analyzeOutcome: (id: string, notes?: string) =>
+    api(`/api/v1/meetings/${id}/analyze-outcome`, {
+      method: 'POST',
+      body: notes ? JSON.stringify({ notes }) : undefined,
+    }),
 };
 
 // ─── Briefings ────────────────────────────────────────────────────────────
@@ -141,7 +144,7 @@ export const briefingsApi = {
       body: JSON.stringify({ meeting_id, force_refresh }),
     }),
   askFollowUp: (meeting_id: string, question: string, history: BriefingMessage[] = []) =>
-    api<{ answer: string; suggested_talking_points?: string[]; action_items?: string[] }>(
+    api<{ answer: string; suggested_talking_points?: string[]; reminders?: string[]; action_items?: string[] }>(
       `/api/v1/briefings/meeting/${meeting_id}/conversation`,
       {
         method: 'POST',
@@ -150,7 +153,7 @@ export const briefingsApi = {
     ),
 };
 
-// ─── Commitments ──────────────────────────────────────────────────────────
+// ─── Commitments / Reminders ──────────────────────────────────────────────
 export type Commitment = {
   id: string;
   meeting_id?: string;
@@ -162,8 +165,12 @@ export type Commitment = {
   is_confirmed: boolean;
   epistemic_class: string;
   commitment_type?: string;
+  source_excerpt?: string;
   created_at: string;
 };
+
+// Alias for Reminders
+export type Reminder = Commitment;
 
 export const commitmentsApi = {
   list: (filters: Record<string, string | boolean | undefined> = {}) => {
@@ -173,6 +180,8 @@ export const commitmentsApi = {
     }
     return api<Commitment[]>(`/api/v1/commitments?${q}`);
   },
+  create: (payload: Partial<Commitment>) =>
+    api<Commitment>('/api/v1/commitments', { method: 'POST', body: JSON.stringify(payload) }),
   confirm: (id: string) =>
     api<Commitment>(`/api/v1/commitments/${id}/confirm`, { method: 'POST' }),
   update: (id: string, payload: Partial<Commitment>) =>
@@ -180,6 +189,70 @@ export const commitmentsApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+};
+
+// Export remindersApi alias pointing to the commitments endpoints
+export const remindersApi = commitmentsApi;
+
+// ─── Inter-Meeting Task Report & Sync ──────────────────────────────────────
+export type InterMeetingSyncResult = {
+  current_meeting_id: string;
+  current_meeting_title: string;
+  previous_meeting?: {
+    id: string;
+    title: string;
+    start_time: string;
+    shared_participants: string[];
+  };
+  report_document_id?: string;
+  report_filename: string;
+  summary_of_progress: string;
+  synced_reminders: {
+    id: string;
+    owner_name: string;
+    description: string;
+    previous_status: string;
+    new_status: string;
+    is_confirmed: boolean;
+    status_changed: boolean;
+    matched_excerpt?: string;
+    notes?: string;
+  }[];
+  new_reminders_added: Commitment[];
+  total_completed: number;
+  total_in_progress: number;
+  briefing_updated: boolean;
+  synced_at: string;
+};
+
+export const interMeetingApi = {
+  getContext: (meetingId: string) =>
+    api<any>(`/api/v1/meetings/${meetingId}/inter-meeting-context`),
+  uploadReportText: (meetingId: string, reportText: string, filename = 'inter_meeting_task_report.txt') =>
+    api<InterMeetingSyncResult>(`/api/v1/meetings/${meetingId}/task-report`, {
+      method: 'POST',
+      body: JSON.stringify({ report_text: reportText, filename }),
+    }),
+  uploadReportFile: async (meetingId: string, file: File): Promise<InterMeetingSyncResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const token = localStorage.getItem('mpa_token');
+    const res = await fetch(`${BASE}/api/v1/meetings/${meetingId}/task-report/upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      try {
+        const parsed = JSON.parse(errText);
+        throw new Error(parsed.detail || errText);
+      } catch {
+        throw new Error(errText);
+      }
+    }
+    return res.json();
+  },
 };
 
 // ─── Contacts ─────────────────────────────────────────────────────────────
@@ -235,6 +308,7 @@ export type IntegrationHealth = {
   attendance_mode: string;
   health_status: string;
   last_sync_at?: string;
+  transcript_capture_enabled?: boolean;
   health_error_message?: string;
 };
 
@@ -243,6 +317,11 @@ export const integrationsApi = {
   googleStatus: () => api<any>('/api/v1/integrations/google/status'),
   calendarSync: (force = false) =>
     api(`/api/v1/integrations/calendar/sync?force_full=${force}`, { method: 'POST' }),
+  configureMeeting: (integration_type: string, config: any) =>
+    api(`/api/v1/integrations/meeting/${integration_type}`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
   transcriptUpload: (payload: any) =>
     api('/api/v1/integrations/transcripts/upload', {
       method: 'POST',

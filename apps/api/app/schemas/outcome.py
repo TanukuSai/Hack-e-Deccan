@@ -84,3 +84,34 @@ class OutcomeAnalysisResponse(BaseModel):
     decisions_made: List[str]
     commitments: List[CommitmentResponse]
     follow_up_draft: FollowUpDraftResponse
+
+class SyncedReminderItem(BaseModel):
+    id: UUID
+    owner_name: str
+    description: str
+    previous_status: str
+    new_status: str
+    is_confirmed: bool
+    status_changed: bool
+    matched_excerpt: Optional[str] = None
+    notes: Optional[str] = None
+
+class PreviousMeetingInfo(BaseModel):
+    id: UUID
+    title: str
+    start_time: datetime
+    shared_participants: List[str]
+
+class InterMeetingReportSyncResponse(BaseModel):
+    current_meeting_id: UUID
+    current_meeting_title: str
+    previous_meeting: Optional[PreviousMeetingInfo] = None
+    report_document_id: Optional[UUID] = None
+    report_filename: str
+    summary_of_progress: str
+    synced_reminders: List[SyncedReminderItem]
+    new_reminders_added: List[CommitmentResponse] = Field(default_factory=list)
+    total_completed: int = 0
+    total_in_progress: int = 0
+    briefing_updated: bool = False
+    synced_at: datetime

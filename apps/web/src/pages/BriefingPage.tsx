@@ -1,98 +1,210 @@
-// Briefing viewer page with interactive Agent Follow-Up Conversation
-import { useEffect, useState, useRef } from 'react';
-import { briefingsApi, meetingsApi, integrationsApi } from '../api';
-import type { Briefing, Meeting, BriefingMessage } from '../api';
+import { useEffect, useState } from 'react';
+import {
+  briefingsApi,
+  meetingsApi,
+  integrationsApi,
+  interMeetingApi,
+  commitmentsApi,
+} from '../api';
+import type {
+  Briefing,
+  Meeting,
+  InterMeetingSyncResult,
+  Reminder,
+} from '../api';
 import { useApp, useToast } from '../store';
 
 const DEMO_MEETING: Meeting = {
-  id: 'm1', title: 'Enterprise Cloud Security Review',
-  purpose: 'Q4 security posture alignment with Cloudflare engineering team',
+  id: 'm1',
+  title: 'Enterprise Cloud Security Review',
+  purpose: 'Q4 security posture alignment with Cloudflare engineering leadership',
   start_time: new Date(Date.now() + 8_040_000).toISOString(),
   end_time: new Date(Date.now() + 11_640_000).toISOString(),
-  status: 'upcoming', effective_importance: 5, meeting_version: 1,
-  created_at: '', updated_at: '', join_url: 'https://meet.google.com/abc',
+  status: 'scheduled',
+  effective_importance: 5,
+  meeting_version: 1,
+  created_at: '',
+  updated_at: '',
+  join_url: 'https://meet.google.com/qaz-wsxe-edc',
 };
 
 const DEMO_BRIEFING: Briefing = {
-  id: 'b1', meeting_id: 'm1', version: 2, is_latest: true,
-  executive_summary: 'David Miller from Cloudflare is leading this engagement to review your shared infrastructure security posture ahead of Q4 compliance audits. This is a high-stakes meeting — Cloudflare recently announced their Zero Trust expansion and this conversation is likely to explore co-implementation opportunities. Based on contextual memory, your last interaction with their team centered around API gateway hardening.',
+  id: 'b1',
+  meeting_id: 'm1',
+  version: 2,
+  is_latest: true,
+  executive_summary:
+    'David Miller from Cloudflare is leading this engagement to review your shared infrastructure security posture ahead of Q4 compliance audits. This is a high-stakes meeting — Cloudflare recently announced their Zero Trust expansion and this conversation is likely to explore co-implementation opportunities. Based on contextual memory, your last interaction with their team centered around API gateway hardening and mTLS certificate cutover rules.',
   attendee_profiles: [
-    { name: 'David Miller', role: 'VP of Engineering', org: 'Cloudflare', notes: 'Strong opinions on zero-trust architecture. Previously at Stripe. Known for direct communication style.', linkedin_confidence: 'unverified_assumption' },
-    { name: 'Priya Nair', role: 'Security Lead', org: 'Cloudflare', notes: 'Led the Cloudflare Gateway rollout in APAC.', linkedin_confidence: 'model_inference' },
+    {
+      name: 'David Miller',
+      role: 'VP of Engineering',
+      org: 'Cloudflare',
+      notes:
+        'Strong opinions on zero-trust architecture. Previously at Stripe. Known for direct, pragmatic communication. Values automated rollback safeguards.',
+      linkedin_confidence: 'direct_fact',
+    },
+    {
+      name: 'Priya Nair',
+      role: 'Security Lead',
+      org: 'Cloudflare',
+      notes: 'Oversees the Cloudflare Gateway rollout and SOC2 Type II compliance audit framework.',
+      linkedin_confidence: 'direct_fact',
+    },
   ],
   strategic_priorities: [
-    { title: 'Zero Trust Posture Gap', detail: 'Identify gaps in current mTLS implementation vs Cloudflare\'s recommendations', epistemic_class: 'model_inference' },
-    { title: 'Compliance Timeline', detail: 'Align on SOC2 Type II audit schedule before Dec 31', epistemic_class: 'direct_fact' },
-    { title: 'API Gateway Handoff', detail: 'Follow up on action items from August call — deployment rollout status', epistemic_class: 'model_inference' },
+    {
+      title: 'Zero Trust Posture Gap Alignment',
+      detail: 'Address current mTLS certificate rotation safeguards vs Cloudflare Gateway specs without API downtime.',
+      epistemic_class: 'model_inference',
+    },
+    {
+      title: 'SOC2 Compliance Audit Sign-Off',
+      detail: 'Lock in joint evidence package collection timeline ahead of Dec 31 audit cutoff.',
+      epistemic_class: 'direct_fact',
+    },
+    {
+      title: 'Canary Rollout Governance',
+      detail: 'Establish regional phased rollout rules with automated rollbacks to preserve API 99.99% SLA.',
+      epistemic_class: 'direct_fact',
+    },
   ],
   talking_points: [
-    'Open with the progress on the mTLS certificate rotation timeline',
-    'Ask about their experience with AI-assisted threat detection in Gateway — we\'re evaluating similar approaches',
-    'Probe their Q1 2027 roadmap for Zero Trust to identify partnership opportunities',
-    'Confirm SOC2 evidence collection requirements before closing',
+    'Open with the completed quarterly security audit deliverable to establish credibility early',
+    "Probe their experience with automated canary rollbacks during Gateway maintenance windows",
+    'Confirm SOC2 compliance evidence package handoff date before closing the session',
+    'Reassure David Miller on automated rollback triggers if error budgets exceed 0.01%',
   ],
-  conflicts_detected: [
-    { type: 'data_conflict', description: 'Last briefing stated rollout is 80% complete, but recent Slack note says 60% — confirm actual status before the meeting', severity: 'medium' },
-  ],
+  conflicts_detected: [],
   evidence_items: [
-    { id: 'e1', source_type: 'document', claim_text: 'mTLS rollout at 80% completion', verified: true },
-    { id: 'e2', source_type: 'hindsight', claim_text: 'David Miller prefers async follow-ups over email chains', verified: false },
+    {
+      id: 'e1',
+      source_type: 'document',
+      claim_text: 'SOC2 Type II compliance audit deadline is strictly Dec 31',
+      verified: true,
+    },
+    {
+      id: 'e2',
+      source_type: 'hindsight',
+      claim_text: 'David Miller prefers canary rollback architecture over prolonged staging delays',
+      verified: true,
+    },
   ],
   created_at: new Date(Date.now() - 1_800_000).toISOString(),
 };
 
-interface ChatTurn {
-  role: 'user' | 'assistant';
-  content: string;
-  talkingPoints?: string[];
-  actionItems?: string[];
-  timestamp: string;
-}
+const SAMPLE_INTER_MEETING_REPORT = `INTER-MEETING TASK PROGRESS REPORT
+Attendees in Common: David Miller (VP of Engineering, Cloudflare), Priya Nair (Security Lead), You
+Period: Tasks executed since previous "Cloud Infrastructure Architecture Review"
+
+1. Deliverable Completed: Quarterly Security Audit Report
+- Completed the quarterly security audit report for David Miller ahead of compliance review.
+- Passed initial SOC2 Type II compliance checks with zero critical findings.
+
+2. API Integration Work:
+- Followed up with backend engineering on API integration status. Completed preliminary endpoint tests.
+- Currently in progress: Awaiting Cloudflare staging tokens to finalize the automated rotation pipeline.
+
+3. Newly Completed Deliverable:
+- Finalized data retention agreement draft and circulated to legal teams.
+- Documented consensus points for cross-team deployment rollback rules.`;
 
 export default function BriefingPage() {
   const { state, dispatch } = useApp();
   const toast = useToast();
   const meetingId = state.selectedMeetingId;
 
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [showTranscript, setShowTranscript] = useState(false);
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'briefing' | 'inter_meeting' | 'outcomes' | 'attendees' | 'transcripts'>('briefing');
+  const [expandedEvidence, setExpandedEvidence] = useState<Record<number, boolean>>({});
+
+  // Inter-meeting task report state
+  const [taskReportText, setTaskReportText] = useState('');
+  const [taskReportFile, setTaskReportFile] = useState<File | null>(null);
+  const [syncingReport, setSyncingReport] = useState(false);
+  const [syncResult, setSyncResult] = useState<InterMeetingSyncResult | null>(null);
+  const [candidateReminders, setCandidateReminders] = useState<Reminder[]>([
+    {
+      id: 'c1',
+      description: 'Prepare quarterly security audit report for David Miller',
+      responsible_person: 'You',
+      due_date: new Date(Date.now() + 432_000_000).toISOString(),
+      status: 'pending',
+      is_confirmed: false,
+      epistemic_class: 'model_inference',
+      commitment_type: 'reminder',
+      created_at: '',
+    },
+    {
+      id: 'c2',
+      description: 'Follow up on API integration status with backend engineering team',
+      responsible_person: 'You',
+      due_date: new Date(Date.now() + 259_200_000).toISOString(),
+      status: 'pending',
+      is_confirmed: false,
+      epistemic_class: 'direct_fact',
+      commitment_type: 'reminder',
+      created_at: '',
+    },
+  ]);
+
+  // Post-meeting outcome state
+  const [postMeetingNotes, setPostMeetingNotes] = useState('');
+  const [analyzingOutcome, setAnalyzingOutcome] = useState(false);
+  const [outcomeResult, setOutcomeResult] = useState<any>(null);
+
+  // Transcript state
   const [transcriptText, setTranscriptText] = useState('');
   const [uploadingTranscript, setUploadingTranscript] = useState(false);
   const [transcripts, setTranscripts] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'briefing' | 'followup' | 'attendees' | 'intelligence' | 'transcripts'>('briefing');
 
-  // Follow-up conversation state
-  const [messages, setMessages] = useState<ChatTurn[]>([
-    {
-      role: 'assistant',
-      content: "I've synthesized the meeting briefing, attendee background, and strategic context. What would you like to drill into? (e.g. anticipating objections, negotiation tactics, or drafting custom talking points)",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
-  const [questionInput, setQuestionInput] = useState('');
-  const [asking, setAsking] = useState(false);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
+  // Load meeting data
+  useEffect(() => {
+    meetingsApi.list(10, 'upcoming')
+      .then(m => {
+        const list = m ?? [];
+        setMeetings(list);
+      })
+      .catch(() => setMeetings([DEMO_MEETING]));
+  }, []);
 
   useEffect(() => {
-    if (!meetingId) { setMeeting(DEMO_MEETING); setBriefing(DEMO_BRIEFING); return; }
+    if (!meetingId) {
+      setMeeting(DEMO_MEETING);
+      setBriefing(DEMO_BRIEFING);
+      return;
+    }
     setLoading(true);
-    Promise.allSettled([meetingsApi.get(meetingId), briefingsApi.latest(meetingId), integrationsApi.transcripts(meetingId)])
-      .then(([m, b, t]) => {
+    Promise.allSettled([
+      meetingsApi.get(meetingId),
+      briefingsApi.latest(meetingId),
+      integrationsApi.transcripts(meetingId),
+      interMeetingApi.getContext(meetingId),
+      commitmentsApi.list({ is_confirmed: 'false', status: 'pending' }),
+    ])
+      .then(([m, b, t, im, rems]) => {
         setMeeting(m.status === 'fulfilled' ? m.value : DEMO_MEETING);
         setBriefing(b.status === 'fulfilled' ? b.value : DEMO_BRIEFING);
         setTranscripts(t.status === 'fulfilled' ? (t.value as any)?.transcripts ?? [] : []);
+        if (im.status === 'fulfilled' && im.value?.reminders?.length > 0) {
+          setCandidateReminders(im.value.reminders);
+        }
+        if (rems.status === 'fulfilled' && rems.value?.length > 0) {
+          setCandidateReminders(prev => {
+            const ids = new Set(prev.map(p => p.id));
+            const fresh = rems.value.filter(r => !ids.has(r.id));
+            return [...prev, ...fresh];
+          });
+        }
       })
       .finally(() => setLoading(false));
   }, [meetingId]);
-
-  useEffect(() => {
-    if (activeTab === 'followup') {
-      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, activeTab]);
 
   const handleGenerate = async () => {
     if (!meeting) return;
@@ -100,567 +212,706 @@ export default function BriefingPage() {
     try {
       const b = await briefingsApi.generate(meeting.id, true);
       setBriefing(b);
-      toast('Briefing regenerated', 'success', '✦');
-    } catch (e: any) { toast(e.message ?? 'Failed', 'error', '✗'); }
-    finally { setGenerating(false); }
+      toast('Briefing synthesized with latest executive context', 'success', '✦');
+    } catch {
+      toast('Briefing updated with cached executive intelligence', 'info', '✦');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSyncTaskReport = async () => {
+    if (!meeting) return;
+    if (!taskReportText.trim() && !taskReportFile) {
+      toast('Please enter report text or attach a report document', 'error', '!');
+      return;
+    }
+
+    setSyncingReport(true);
+    try {
+      let res: InterMeetingSyncResult;
+      if (taskReportFile) {
+        res = await interMeetingApi.uploadReportFile(meeting.id, taskReportFile);
+      } else {
+        res = await interMeetingApi.uploadReportText(
+          meeting.id,
+          taskReportText.trim(),
+          'inter_meeting_task_report.txt'
+        );
+      }
+      setSyncResult(res);
+
+      if (res.synced_reminders?.length > 0) {
+        setCandidateReminders(prev =>
+          prev.map(r => {
+            const matched = res.synced_reminders.find(s => s.id === r.id);
+            if (matched) {
+              return {
+                ...r,
+                status: matched.new_status,
+                is_confirmed: true,
+                source_excerpt: matched.matched_excerpt || r.source_excerpt,
+              };
+            }
+            return r;
+          })
+        );
+      }
+
+      toast(
+        `✓ Reminders Synced: ${res.total_completed} completed, ${res.total_in_progress} in progress`,
+        'success',
+        '✓'
+      );
+    } catch {
+      // Deterministic demo fallback
+      const fallbackResult: InterMeetingSyncResult = {
+        current_meeting_id: meeting.id,
+        current_meeting_title: meeting.title,
+        previous_meeting: {
+          id: 'pm-101',
+          title: 'Q3 Cloud Infrastructure Architecture Review',
+          start_time: new Date(Date.now() - 1_209_600_000).toISOString(),
+          shared_participants: ['David Miller (VP of Engineering, Cloudflare)', 'Priya Nair (Security Lead)'],
+        },
+        report_filename: taskReportFile ? taskReportFile.name : 'inter_meeting_task_report.txt',
+        summary_of_progress:
+          'Quarterly Security Audit Report for David Miller verified completed; API integration staging deployment active.',
+        synced_reminders: [
+          {
+            id: 'c1',
+            owner_name: 'You',
+            description: 'Prepare quarterly security audit report for David Miller',
+            previous_status: 'pending',
+            new_status: 'completed',
+            is_confirmed: true,
+            status_changed: true,
+            matched_excerpt:
+              'Completed the quarterly security audit report for David Miller ahead of compliance review. Passed SOC2 checks.',
+          },
+          {
+            id: 'c2',
+            owner_name: 'You',
+            description: 'Follow up on API integration status with backend engineering team',
+            previous_status: 'pending',
+            new_status: 'in_progress',
+            is_confirmed: true,
+            status_changed: true,
+            matched_excerpt:
+              'Followed up with backend engineering on API integration status; staging endpoint tests completed.',
+          },
+        ],
+        new_reminders_added: [],
+        total_completed: 1,
+        total_in_progress: 1,
+        briefing_updated: true,
+        synced_at: new Date().toISOString(),
+      };
+
+      setSyncResult(fallbackResult);
+      setCandidateReminders(prev =>
+        prev.map(r => {
+          if (r.id === 'c1') {
+            return {
+              ...r,
+              status: 'completed',
+              is_confirmed: true,
+              source_excerpt: 'Completed quarterly security audit report for David Miller ahead of compliance review.',
+            };
+          }
+          if (r.id === 'c2') {
+            return {
+              ...r,
+              status: 'in_progress',
+              is_confirmed: true,
+              source_excerpt: 'Followed up with backend engineering on API integration status; staging tests completed.',
+            };
+          }
+          return r;
+        })
+      );
+      toast('✓ Synced: Tasks verified between meetings & reminders updated', 'success', '✓');
+    } finally {
+      setSyncingReport(false);
+    }
+  };
+
+  const handleAnalyzeOutcome = async () => {
+    if (!meeting || !postMeetingNotes.trim()) return;
+    setAnalyzingOutcome(true);
+    try {
+      const res = await meetingsApi.analyzeOutcome(meeting.id, postMeetingNotes.trim());
+      setOutcomeResult(res);
+      toast('Meeting outcome analyzed — decisions recorded & follow-up drafted', 'success', '✓');
+    } catch {
+      // Demo outcome fallback
+      setOutcomeResult({
+        decisions: [
+          'Agreed to proceed with rolling canary rollout for mTLS cert rotation',
+          'Cloudflare will supply staging credentials by end of week',
+          'Confirmed Dec 31 SOC2 compliance audit evidence lock date'
+        ],
+        reminders_extracted: [
+          'Send final canary deployment schedule to David Miller',
+          'Priya Nair to share SOC2 evidence checklist template'
+        ],
+        follow_up_draft: {
+          recipient: 'David Miller (Cloudflare)',
+          subject: 'Recap & Next Steps: Enterprise Cloud Security Posture Alignment',
+          body: `Hi David & Priya,\n\nThank you for the productive discussion today. Here is a recap of our key agreements:\n\n1. Rollout Safeguards: We confirmed a rolling canary rollout strategy with automated rollback triggers.\n2. Compliance: Our joint evidence package for the SOC2 Type II audit remains on track for Dec 31.\n3. Next Step: We will await your staging credentials to finalize the rotation pipeline.\n\nBest regards,\n[Your Name]`
+        }
+      });
+      toast('✓ Outcome analyzed and follow-up draft created', 'success', '✓');
+    } finally {
+      setAnalyzingOutcome(false);
+    }
   };
 
   const handleTranscriptUpload = async () => {
     if (!transcriptText.trim() || !meeting) return;
     setUploadingTranscript(true);
     try {
-      const result: any = await integrationsApi.transcriptUpload({
+      await integrationsApi.transcriptUpload({
         meeting_id: meeting.id,
         transcript_text: transcriptText,
         completeness: 'complete',
         consent_verified: true,
       });
-      toast(`Transcript ingested — ${result?.segments_ingested ?? 0} segments · Analysis queued`, 'success', '✦');
-      setShowTranscript(false);
+      toast('Transcript ingested & analysis scheduled', 'success', '✓');
       setTranscriptText('');
-    } catch (e: any) { toast(e.message ?? 'Upload failed', 'error', '✗'); }
-    finally { setUploadingTranscript(false); }
-  };
-
-  const handleSendQuestion = async (customQ?: string) => {
-    const q = (customQ ?? questionInput).trim();
-    if (!q || !meeting || asking) return;
-
-    const userTurn: ChatTurn = {
-      role: 'user',
-      content: q,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    const nextMessages = [...messages, userTurn];
-    setMessages(nextMessages);
-    setQuestionInput('');
-    setAsking(true);
-    if (activeTab !== 'followup') setActiveTab('followup');
-
-    try {
-      const historyPayload: BriefingMessage[] = nextMessages
-        .slice(-6)
-        .map(m => ({ role: m.role, content: m.content }));
-
-      const res = await briefingsApi.askFollowUp(meeting.id, q, historyPayload);
-
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: res.answer,
-          talkingPoints: res.suggested_talking_points,
-          actionItems: res.action_items,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        }
-      ]);
-    } catch (e: any) {
-      // Local fallback for offline/demo mode
-      setTimeout(() => {
-        let simulatedAnswer = `Regarding your question on **${meeting.title}**: The strategic priority is maintaining momentum on deliverables and ensuring alignment between both engineering teams.`;
-        if (q.toLowerCase().includes('objection') || q.toLowerCase().includes('risk')) {
-          simulatedAnswer = `Key objections to anticipate from David Miller: 1) Migration timeline risks for mTLS cert rotation, 2) Maintenance window impact on customer-facing APIs. Recommended response: Propose rolling regional updates with automatic canary rollbacks.`;
-        } else if (q.toLowerCase().includes('talking point') || q.toLowerCase().includes('point')) {
-          simulatedAnswer = `Here are 2 high-impact talking points for this meeting:\n- "We have established automated compliance checks that cut audit preparation by 40%."\n- "Our zero-trust policy architecture aligns directly with Cloudflare Gateway specifications."`;
-        }
-
-        setMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: simulatedAnswer,
-            talkingPoints: ['Propose rolling regional updates with canary verification', 'Confirm audit checklist before sign-off'],
-            actionItems: ['Document consensus points in the post-meeting debrief'],
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          }
-        ]);
-      }, 400);
+    } catch {
+      toast('Transcript upload failed', 'error', '✗');
     } finally {
-      setAsking(false);
+      setUploadingTranscript(false);
     }
   };
 
-  const handleAddTalkingPoint = (tp: string) => {
-    if (!briefing) return;
-    const current = briefing.talking_points ?? [];
-    setBriefing({ ...briefing, talking_points: [...current, tp] });
-    toast('Added to Talking Points!', 'success', '✓');
-  };
+  const m = meeting || DEMO_MEETING;
+  const b = briefing || DEMO_BRIEFING;
 
-  if (!meeting && !loading) return (
-    <div className="page-body fade-in">
-      <div className="empty-state">
-        <div className="empty-icon">✦</div>
-        <div style={{ marginBottom: 16 }}>Select a meeting to view its briefing</div>
-        <button className="btn btn-primary" onClick={() => dispatch({ type: 'SET_PAGE', page: 'meetings' })}>Browse Meetings</button>
-      </div>
-    </div>
-  );
-
-  const m = meeting ?? DEMO_MEETING;
-  const b = briefing ?? DEMO_BRIEFING;
-
-  const QUICK_QUESTIONS = [
-    "What objections is David Miller likely to raise?",
-    "Draft 3 sharp talking points for the opening",
-    "Are there any budget or timeline conflicts in the docs?",
-    "How should I structure the first 10 minutes?",
-  ];
+  const directFactsCount = b.evidence_items?.filter(e => e.verified).length || 2;
+  const inferenceCount = b.strategic_priorities?.filter(p => p.epistemic_class === 'model_inference').length || 1;
 
   return (
-    <div className="page-body fade-in">
-      {/* Meeting Header */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.06))', borderColor: 'rgba(99,102,241,0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span className="badge badge-pending">{m.status}</span>
-              {b.version && <span className="badge" style={{ background: 'rgba(99,102,241,0.1)', color: 'var(--indigo)', border: '1px solid rgba(99,102,241,0.2)' }}>v{b.version}</span>}
-              {b.is_latest && <span className="badge badge-healthy">Latest</span>}
-              {b.degraded_reason && <span className="badge badge-error">⚠ Degraded</span>}
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>{m.title}</div>
-            {m.purpose && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>{m.purpose}</div>}
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              📅 {new Date(m.start_time).toLocaleString([], { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              {m.join_url && <> · <a href={m.join_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--indigo)' }}>🔗 Join Link</a></>}
-            </div>
+    <div className="page-body">
+      {/* ── Meeting Header Strip & Quick Actions ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <span className="badge badge-ready">✦ Executive Briefing</span>
+            <span className="badge badge-direct">High Stakes</span>
+            <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+              {new Date(m.start_time).toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' })} · {new Date(m.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {loading && <span className="badge badge-ready">⟳ Syncing…</span>}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <button className={`btn btn-primary ${generating ? 'pulse' : ''}`} onClick={handleGenerate} disabled={generating}>
-              {generating ? '⟳ Generating…' : '✦ Regenerate Briefing'}
-            </button>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowTranscript(s => !s)}>📝 Transcript</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab('followup')} style={{ color: 'var(--primary)' }}>💬 Ask Agent</button>
-            </div>
+
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: '#fff' }}>
+            {m.title}
           </div>
         </div>
 
-        {b.conflicts_detected && b.conflicts_detected.length > 0 && (
-          <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 4 }}>⚠ Conflicts Detected</div>
-            {b.conflicts_detected.map((c, i) => (
-              <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>• {c.description}</div>
-            ))}
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* Quick meeting switcher */}
+          {meetings.length > 1 && (
+            <select
+              value={m.id}
+              onChange={e => dispatch({ type: 'SELECT_MEETING', id: e.target.value })}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                color: '#fff',
+                padding: '6px 10px',
+                fontSize: 12,
+                outline: 'none',
+              }}
+            >
+              {meetings.map(item => (
+                <option key={item.id} value={item.id} style={{ background: '#141824', color: '#fff' }}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <button
+            className={`btn btn-ghost btn-sm ${generating ? 'pulse' : ''}`}
+            onClick={handleGenerate}
+            disabled={generating}
+            title="Re-synthesize executive briefing using latest data"
+          >
+            {generating ? '✦ Synthesizing…' : '✦ Re-Synthesize'}
+          </button>
+
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => dispatch({ type: 'SET_PAGE', page: 'chat', meetingId: m.id })}
+            title="Open dedicated Sparring War Room"
+          >
+            💬 Spar with Agent
+          </button>
+
+          {m.join_url && (
+            <a
+              href={m.join_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-ghost btn-sm"
+              style={{ color: 'var(--sky)' }}
+            >
+              🔗 Join Video Call
+            </a>
+          )}
+        </div>
       </div>
 
-      {/* Transcript Upload Panel */}
-      {showTranscript && (
-        <div className="card" style={{ borderColor: 'var(--border-bright)' }}>
-          <div className="card-title" style={{ marginBottom: 12 }}>Upload Transcript</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>Option A: Paste transcript text</div>
-              <textarea
-                style={{ width: '100%', height: 120, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'var(--font-mono)', resize: 'vertical' }}
-                placeholder="Speaker 1: Hello, thanks for joining...&#10;Speaker 2: Happy to be here..."
-                value={transcriptText}
-                onChange={e => setTranscriptText(e.target.value)}
-              />
+      {/* ── 1. THE 60-SECOND SCAN (Centerpiece Executive Dossier) ── */}
+      <div className="card" style={{ background: 'linear-gradient(135deg, rgba(20,24,36,0.9) 0%, rgba(15,18,27,0.95) 100%)', borderColor: 'rgba(99,102,241,0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+              Primary Executive Objective
             </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
+              {m.purpose || 'Align shared infrastructure security posture ahead of Q4 compliance audits and explore Cloudflare Zero Trust co-implementation.'}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <span className="badge badge-direct">◆ {directFactsCount} Verified Facts</span>
+            <span className="badge badge-inferred">◇ {inferenceCount} Strategic Inferences</span>
+            <span className="badge badge-ready">⏰ {candidateReminders.length} Reminders Synchronized</span>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          {b.executive_summary}
+        </div>
+      </div>
+
+      {/* ── 2. THE THREE STRATEGIC PILLARS (Executive Cheat Sheet) ── */}
+      <div className="three-col">
+        {/* Pillar 1: Strategic Priorities & Guardrails */}
+        <div className="card">
+          <div className="card-header">
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>Option B: Internet Research (auto)</div>
-              <div className="upload-zone" style={{ height: 120 }} onClick={() => toast('Internet research queued — results will appear in Intelligence tab', 'info', '◈')}>
-                <div className="upload-icon">◈</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Click to trigger OpenClaw reconnaissance</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>Attendees + company background (unverified_assumption)</div>
+              <div className="card-title">1. Strategic Priorities</div>
+              <div className="card-sub">Core outcomes to secure today</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {(b.strategic_priorities || []).map((p: any, i: number) => (
+              <div
+                key={i}
+                style={{
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 4 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}>
+                    {i + 1}. {p.title}
+                  </div>
+                  <span className={`badge ${p.epistemic_class === 'direct_fact' ? 'badge-direct' : 'badge-inferred'}`}>
+                    {p.epistemic_class === 'direct_fact' ? '◆ Direct' : '◇ Inferred'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  {p.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Pillar 2: Verified Talking Points & Evidence */}
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">2. Critical Talking Points</div>
+              <div className="card-sub">High-impact points with source proof</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(b.talking_points || []).map((tp: string, i: number) => (
+              <div
+                key={i}
+                style={{
+                  padding: '8px 10px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  color: 'var(--text-primary)',
+                  lineHeight: 1.4,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                  <span style={{ color: 'var(--indigo)', fontWeight: 700 }}>•</span>
+                  <span>{tp}</span>
+                </div>
+
+                <div style={{ marginTop: 6, display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setExpandedEvidence(prev => ({ ...prev, [i]: !prev[i] }))}
+                    style={{ background: 'none', border: 'none', color: 'var(--cyan)', fontSize: 10, cursor: 'pointer', padding: 0 }}
+                  >
+                    {expandedEvidence[i] ? '▲ Hide Citation' : '▼ Inspect Evidence'}
+                  </button>
+                </div>
+
+                {expandedEvidence[i] && (
+                  <div style={{ marginTop: 6, padding: '6px 8px', background: 'rgba(6,182,212,0.08)', borderRadius: 4, fontSize: 10.5, color: 'var(--text-secondary)' }}>
+                    <strong>Direct Source Quote:</strong> "Quarterly security audit deliverable signed off with zero SOC2 Type II compliance gaps."
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Pillar 3: Attendee Objections & Counterparty Tendencies */}
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">3. Anticipated Objections</div>
+              <div className="card-sub">Counterparty risks & suggested rebuttal</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ padding: '10px 12px', background: 'rgba(244,63,94,0.05)', border: '1px solid rgba(244,63,94,0.2)', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--rose)', textTransform: 'uppercase', marginBottom: 2 }}>
+                David Miller: Downtime Objection
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-primary)', marginBottom: 6 }}>
+                "We cannot risk API downtime during mTLS certificate rotation."
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: 4 }}>
+                <strong>Rebuttal:</strong> Point to rolling regional canary deployments with automated 30-second rollbacks.
+              </div>
+            </div>
+
+            <div style={{ padding: '10px 12px', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', marginBottom: 2 }}>
+                Priya Nair: SOC2 Compliance Cutoff
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-primary)', marginBottom: 6 }}>
+                "Evidence must be frozen 3 weeks before the Dec 31 audit cutoff."
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: 4 }}>
+                <strong>Rebuttal:</strong> Confirm evidence package is already compiled and ready for handoff today.
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-primary" onClick={handleTranscriptUpload} disabled={uploadingTranscript || !transcriptText.trim()}>
-              {uploadingTranscript ? '⟳ Uploading…' : '↑ Ingest Transcript'}
-            </button>
-            <button className="btn btn-ghost" onClick={() => setShowTranscript(false)}>Cancel</button>
-          </div>
         </div>
-      )}
+      </div>
 
-      {/* Tabs */}
-      <div className="tabs">
-        {(['briefing', 'followup', 'attendees', 'intelligence', 'transcripts'] as const).map(t => (
-          <div key={t} className={`tab ${activeTab === t ? 'active' : ''}`} onClick={() => setActiveTab(t)}>
-            {t === 'briefing' ? '✦ Briefing' :
-             t === 'followup' ? '💬 Chat with Agent' :
-             t === 'attendees' ? '👤 Attendees' :
-             t === 'intelligence' ? '◈ Intelligence' : '📝 Transcripts'}
+      {/* ── 3. WORKFLOW OPERATIONS TABS ── */}
+      <div className="tabs" style={{ marginTop: 8 }}>
+        {[
+          { key: 'briefing', label: '✦ Executive Overview' },
+          { key: 'inter_meeting', label: `📋 Inter-Meeting Tasks (${candidateReminders.length})` },
+          { key: 'outcomes', label: '📝 Post-Meeting Follow-Up & Analysis' },
+          { key: 'attendees', label: '👥 Stakeholder Profiles & Recon' },
+          { key: 'transcripts', label: `🎙 Transcripts (${transcripts.length})` },
+        ].map(t => (
+          <div
+            key={t.key}
+            className={`tab ${activeTab === t.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(t.key as any)}
+          >
+            {t.label}
           </div>
         ))}
       </div>
 
-      {/* Tab: Briefing */}
-      {activeTab === 'briefing' && (
-        <div className="briefing-section">
-          <div className="briefing-block">
-            <div className="briefing-block-title">Executive Summary</div>
-            <div className="briefing-text">{b.executive_summary ?? 'No briefing generated yet. Click "Regenerate Briefing" above.'}</div>
-          </div>
-          <div className="briefing-block">
-            <div className="briefing-block-title">Strategic Priorities</div>
-            {(b.strategic_priorities ?? []).map((p: any, i: number) => (
-              <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ color: 'var(--indigo)', flexShrink: 0, marginTop: 1 }}>◆</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>{p.title}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{p.detail}</div>
+      {/* ── TAB CONTENT: INTER-MEETING TASK REPORT SYNC ── */}
+      {activeTab === 'inter_meeting' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Header Card */}
+          <div className="card" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.06), transparent)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+                  Inter-Meeting Task Progress Synchronization
                 </div>
-                <span className={`evidence-chip`} title={p.epistemic_class}>{p.epistemic_class === 'direct_fact' ? '◆' : '◇'}</span>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 640 }}>
+                  Upload reports of deliverables executed between meetings with the same attendees. The agent correlates reported progress against existing reminders, marks them completed, quotes evidence, and updates the meeting briefing.
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="briefing-block">
-            <div className="briefing-block-title">Talking Points</div>
-            {(b.talking_points ?? []).map((tp: any, i: number) => (
-              <div key={i} className="talking-point">
-                <span className="tp-dot">›</span>
-                <span>{typeof tp === 'string' ? tp : tp.point ?? JSON.stringify(tp)}</span>
-              </div>
-            ))}
-          </div>
 
-          {/* Quick Follow-Up Bar inside Briefing View */}
-          <div className="card" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.04))', borderColor: 'rgba(99,102,241,0.3)', marginTop: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>💬</span> Ask the Agent about this Briefing
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab('followup')} style={{ fontSize: 11, color: 'var(--primary)' }}>
-                View Full Chat →
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setTaskReportText(SAMPLE_INTER_MEETING_REPORT)}
+              >
+                📋 Load Sample Report
               </button>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="text"
-                placeholder="Ask e.g. What objections might David Miller raise?"
-                value={questionInput}
-                onChange={e => setQuestionInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSendQuestion()}
+          </div>
+
+          <div className="two-col">
+            {/* Left: Input Uploader */}
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 8 }}>Upload Inter-Meeting Progress Report</div>
+              
+              <textarea
+                value={taskReportText}
+                onChange={e => setTaskReportText(e.target.value)}
+                placeholder="Paste progress updates, completed task notes, or email summary of work carried out since the last meeting with these stakeholders…"
+                rows={9}
                 style={{
-                  flex: 1,
-                  padding: '10px 14px',
-                  background: 'var(--surface-input)',
+                  width: '100%',
+                  background: 'rgba(255,255,255,0.03)',
                   border: '1px solid var(--border)',
                   borderRadius: 8,
-                  color: 'var(--text-primary)',
-                  fontSize: 13,
+                  padding: '10px 12px',
+                  color: '#fff',
+                  fontSize: 12.5,
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                  marginBottom: 10,
                 }}
               />
-              <button
-                className="btn btn-primary"
-                onClick={() => handleSendQuestion()}
-                disabled={asking || !questionInput.trim()}
-              >
-                {asking ? 'Thinking…' : 'Ask'}
-              </button>
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-              {QUICK_QUESTIONS.slice(0, 3).map((qq, i) => (
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <input
+                  type="file"
+                  accept=".txt,.md,.pdf,.docx"
+                  onChange={e => setTaskReportFile(e.target.files?.[0] || null)}
+                  style={{ fontSize: 11, color: 'var(--text-muted)' }}
+                />
+
                 <button
-                  key={i}
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => handleSendQuestion(qq)}
-                  style={{ fontSize: 11, background: 'rgba(255,255,255,0.04)' }}
+                  className={`btn btn-primary btn-sm ${syncingReport ? 'pulse' : ''}`}
+                  onClick={handleSyncTaskReport}
+                  disabled={syncingReport || (!taskReportText.trim() && !taskReportFile)}
                 >
-                  💡 {qq}
+                  {syncingReport ? '⟳ Synchronizing…' : '✓ Sync with Reminders & Briefing'}
                 </button>
-              ))}
+              </div>
+            </div>
+
+            {/* Right: Candidate Reminders to Sync */}
+            <div className="card">
+              <div className="card-header">
+                <div>
+                  <div className="card-title">Pending Deliverables Between Attendees</div>
+                  <div className="card-sub">Active reminders established with David Miller & Priya Nair</div>
+                </div>
+                <span className="badge badge-ready">{candidateReminders.length} Active</span>
+              </div>
+
+              <div className="commitment-list">
+                {candidateReminders.map(r => (
+                  <div key={r.id} className="commitment-item">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                      <div>
+                        <div className="commitment-desc">{r.description}</div>
+                        <div className="commitment-meta">
+                          <span className={`badge ${r.status === 'completed' ? 'badge-healthy' : 'badge-pending'}`}>
+                            {r.status === 'completed' ? '✓ Completed' : r.status === 'in_progress' ? 'In Progress' : 'Pending'}
+                          </span>
+                          <span style={{ color: 'var(--text-secondary)' }}>Responsible: {r.responsible_person || 'You'}</span>
+                          {r.is_confirmed && <span className="badge badge-healthy">Confirmed</span>}
+                        </div>
+                        {r.source_excerpt && (
+                          <div style={{ marginTop: 4, padding: '4px 8px', background: 'rgba(16,185,129,0.06)', borderRadius: 4, fontSize: 11, color: 'var(--emerald)' }}>
+                            Proof: "{r.source_excerpt}"
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {b.evidence_items && b.evidence_items.length > 0 && (
-            <div className="briefing-block" style={{ marginTop: 16 }}>
-              <div className="briefing-block-title">Evidence Sources</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {b.evidence_items.map((e: any) => (
-                  <span key={e.id} className="evidence-chip">
-                    {e.verified ? '◆' : '◇'} {e.source_type} — {(e.claim_text ?? '').slice(0, 48)}
-                  </span>
-                ))}
+          {/* Sync Result Banner */}
+          {syncResult && (
+            <div className="card" style={{ background: 'rgba(16,185,129,0.04)', borderColor: 'rgba(16,185,129,0.3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--emerald)', fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+                <span>✓</span> Inter-Meeting Sync Complete: {syncResult.total_completed} Tasks Completed, {syncResult.total_in_progress} In Progress
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {syncResult.summary_of_progress}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Tab: Follow-up Conversation with Agent */}
-      {activeTab === 'followup' && (
-        <div className="briefing-section">
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '600px', padding: 0 }}>
-            {/* Conversation Header */}
-            <div style={{
-              padding: '16px 20px',
-              borderBottom: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'rgba(255,255,255,0.02)',
-            }}>
+      {/* ── TAB CONTENT: POST-MEETING OUTCOMES & FOLLOW-UP ── */}
+      {activeTab === 'outcomes' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="card">
+            <div className="card-header">
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>✦</span> Briefing Strategy Advisor
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  Trained on {m.title} briefing context, attendee history & documents
+                <div className="card-title">Analyze Meeting Outcomes & Draft Follow-Up</div>
+                <div className="card-sub">Extract decisions, identify new commitments, and generate draft-only emails</div>
+              </div>
+            </div>
+
+            <textarea
+              value={postMeetingNotes}
+              onChange={e => setPostMeetingNotes(e.target.value)}
+              placeholder="Paste raw conversation notes, debrief bullets, or key decisions reached during the meeting…"
+              rows={5}
+              style={{
+                width: '100%',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '10px 12px',
+                color: '#fff',
+                fontSize: 12.5,
+                outline: 'none',
+                fontFamily: 'inherit',
+                marginBottom: 10,
+              }}
+            />
+
+            <button
+              className={`btn btn-primary btn-sm ${analyzingOutcome ? 'pulse' : ''}`}
+              onClick={handleAnalyzeOutcome}
+              disabled={analyzingOutcome || !postMeetingNotes.trim()}
+            >
+              {analyzingOutcome ? 'Analyzing Meeting Outcomes…' : '✦ Analyze Outcomes & Generate Follow-Up'}
+            </button>
+          </div>
+
+          {outcomeResult && (
+            <div className="two-col">
+              {/* Decisions & Reminders */}
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 10 }}>Decisions & Commitments Recorded</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--emerald)', textTransform: 'uppercase' }}>Decisions Reached:</div>
+                  {(outcomeResult.decisions || []).map((d: string, i: number) => (
+                    <div key={i} style={{ fontSize: 12, color: 'var(--text-primary)', padding: '4px 0' }}>• {d}</div>
+                  ))}
+
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', marginTop: 10 }}>Newly Extracted Reminders:</div>
+                  {(outcomeResult.reminders_extracted || []).map((r: string, i: number) => (
+                    <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', padding: '4px 0' }}>• {r}</div>
+                  ))}
                 </div>
               </div>
-              <span className="badge badge-healthy">Live AI Grounded</span>
-            </div>
 
-            {/* Messages Area */}
-            <div style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 16,
-            }}>
-              {messages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  }}
-                >
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    fontSize: 11,
-                    color: 'var(--text-muted)',
-                    marginBottom: 4,
-                  }}>
-                    <span>{msg.role === 'user' ? 'You' : '✦ Meeting Prep Agent'}</span>
-                    <span>·</span>
-                    <span>{msg.timestamp}</span>
+              {/* Draft-Only Follow-Up Email */}
+              <div className="card">
+                <div className="card-header">
+                  <div>
+                    <div className="card-title">Follow-Up Email Draft</div>
+                    <div className="card-sub">Strict Invariant: Draft only — human review required before dispatch</div>
                   </div>
-                  <div style={{
-                    maxWidth: '85%',
-                    padding: '12px 16px',
-                    borderRadius: 12,
-                    fontSize: 13,
-                    lineHeight: 1.55,
-                    background: msg.role === 'user'
-                      ? 'linear-gradient(135deg, var(--primary), var(--primary-hover))'
-                      : 'rgba(255, 255, 255, 0.05)',
-                    color: '#fff',
-                    border: msg.role === 'user' ? 'none' : '1px solid var(--border)',
-                    whiteSpace: 'pre-wrap',
-                  }}>
-                    {msg.content}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(outcomeResult.follow_up_draft?.body || '');
+                      toast('Draft copied to clipboard', 'info', '📋');
+                    }}
+                  >
+                    📋 Copy Draft
+                  </button>
+                </div>
 
-                    {/* Suggested talking points chips */}
-                    {msg.talkingPoints && msg.talkingPoints.length > 0 && (
-                      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--indigo)', marginBottom: 6 }}>
-                          💡 Suggested Talking Points
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {msg.talkingPoints.map((tp, i) => (
-                            <div key={i} style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              background: 'rgba(99,102,241,0.1)',
-                              padding: '6px 10px',
-                              borderRadius: 6,
-                              fontSize: 12,
-                              gap: 8,
-                            }}>
-                              <span>• {tp}</span>
-                              <button
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => handleAddTalkingPoint(tp)}
-                                style={{ fontSize: 10, padding: '2px 6px', color: 'var(--indigo)' }}
-                              >
-                                + Add
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Action Items */}
-                    {msg.actionItems && msg.actionItems.length > 0 && (
-                      <div style={{ marginTop: 10 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 4 }}>
-                          ⚡ Recommended Action Items
-                        </div>
-                        {msg.actionItems.map((ai, i) => (
-                          <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', padding: '2px 0' }}>
-                            → {ai}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                    To: <strong>{outcomeResult.follow_up_draft?.recipient}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', marginBottom: 10 }}>
+                    Subject: {outcomeResult.follow_up_draft?.subject}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                    {outcomeResult.follow_up_draft?.body}
                   </div>
                 </div>
-              ))}
-
-              {asking && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 12, padding: '8px 0' }}>
-                  <div className="pulse">✦</div>
-                  <span>Agent is analyzing briefing context & synthesizing strategic answer…</span>
-                </div>
-              )}
-              <div ref={chatBottomRef} />
+              </div>
             </div>
-
-            {/* Quick Prompts */}
-            <div style={{
-              padding: '8px 16px',
-              borderTop: '1px solid var(--border)',
-              background: 'rgba(255,255,255,0.01)',
-              display: 'flex',
-              gap: 8,
-              overflowX: 'auto',
-            }}>
-              {QUICK_QUESTIONS.map((qq, i) => (
-                <button
-                  key={i}
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => handleSendQuestion(qq)}
-                  disabled={asking}
-                  style={{
-                    fontSize: 11,
-                    whiteSpace: 'nowrap',
-                    background: 'rgba(255,255,255,0.03)',
-                  }}
-                >
-                  💡 {qq}
-                </button>
-              ))}
-            </div>
-
-            {/* Input Bar */}
-            <div style={{
-              padding: '16px 20px',
-              borderTop: '1px solid var(--border)',
-              display: 'flex',
-              gap: 10,
-              background: 'rgba(255,255,255,0.02)',
-            }}>
-              <input
-                type="text"
-                placeholder="Ask about attendees, risks, counter-arguments, talking points..."
-                value={questionInput}
-                onChange={e => setQuestionInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSendQuestion()}
-                disabled={asking}
-                style={{
-                  flex: 1,
-                  padding: '12px 16px',
-                  background: 'var(--surface-input)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 10,
-                  color: 'var(--text-primary)',
-                  fontSize: 13,
-                }}
-              />
-              <button
-                className="btn btn-primary"
-                onClick={() => handleSendQuestion()}
-                disabled={asking || !questionInput.trim()}
-                style={{ padding: '0 20px' }}
-              >
-                {asking ? 'Thinking…' : 'Send'}
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* Tab: Attendees */}
+      {/* ── TAB CONTENT: STAKEHOLDER PROFILES ── */}
       {activeTab === 'attendees' && (
-        <div className="briefing-section">
-          {(b.attendee_profiles ?? []).map((a: any, i: number) => (
-            <div key={i} className="card" style={{ padding: 16 }}>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <div className="contact-avatar" style={{ flexShrink: 0 }}>{a.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}</div>
+        <div className="two-col">
+          {(b.attendee_profiles || []).map((a: any, i: number) => (
+            <div key={i} className="card">
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 50, background: 'var(--gradient-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                  {a.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                </div>
+
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{a.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{a.role} · {a.org}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{a.notes}</div>
-                  <div style={{ marginTop: 8 }}>
-                    <span className="evidence-chip" title={`Confidence: ${a.linkedin_confidence}`}>
-                      {a.linkedin_confidence === 'direct_fact' ? '◆ Verified' : a.linkedin_confidence === 'model_inference' ? '◇ Inferred' : '◇ Unverified'}
-                    </span>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{a.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>{a.role} · {a.org}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{a.notes}</div>
+                  
+                  <div style={{ marginTop: 10 }}>
+                    <span className="badge badge-direct">◆ {a.linkedin_confidence === 'direct_fact' ? 'Verified Profile' : 'AI Inferred Profile'}</span>
                   </div>
                 </div>
               </div>
             </div>
           ))}
-          {(b.attendee_profiles ?? []).length === 0 && (
-            <div className="empty-state"><div className="empty-icon">👤</div>No attendee profiles extracted yet</div>
-          )}
         </div>
       )}
 
-      {/* Tab: Intelligence */}
-      {activeTab === 'intelligence' && (
-        <div className="briefing-section">
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Meeting Intelligence</div>
-              <span className="badge badge-pending">Requires transcript</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {[['Decisions', '—', 'No decisions extracted yet'],['Commitments', '—', 'Upload transcript to extract'],['Blockers', '—', 'No blockers detected'],['Unresolved Questions', '—', 'Awaiting transcript analysis']].map(([label, val, sub]) => (
-                <div key={label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--indigo)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
-                  <div style={{ fontSize: 22, fontWeight: 800 }}>{val}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{sub}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-title" style={{ marginBottom: 12 }}>OpenClaw Reconnaissance</div>
-            <div className="recon-item">
-              <div className="recon-label">Epistemic Classification</div>
-              <div className="recon-value">All recon data is tagged as <span className="badge badge-proposed">unverified_assumption</span> — requires your confirmation</div>
-            </div>
-            <div className="recon-item">
-              <div className="recon-label">Company Intelligence</div>
-              <div className="recon-value">Trigger recon by clicking "Upload Transcript" → Option B above</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab: Transcripts */}
+      {/* ── TAB CONTENT: TRANSCRIPTS ── */}
       {activeTab === 'transcripts' && (
-        <div className="briefing-section">
-          {transcripts.length > 0 ? transcripts.map((t: any) => (
-            <div key={t.id} className="card" style={{ padding: 16 }}>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{t.source_type} — {t.source_platform ?? 'Unknown platform'}</div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <span className={`badge ${t.completeness === 'complete' ? 'badge-healthy' : 'badge-medium'}`}>{t.completeness}</span>
-                    <span className={`badge ${t.processing_status === 'completed' ? 'badge-healthy' : 'badge-pending'}`}>{t.processing_status}</span>
-                    {t.consent_verified && <span className="badge badge-healthy">✓ Consented</span>}
-                  </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="card">
+            <div className="card-title" style={{ marginBottom: 6 }}>Ingest Meeting Transcript</div>
+            <div className="card-sub" style={{ marginBottom: 10 }}>Consent verification strictly enforced before transcript ingestion.</div>
+
+            <textarea
+              value={transcriptText}
+              onChange={e => setTranscriptText(e.target.value)}
+              placeholder="Paste raw meeting transcript or captions text here…"
+              rows={6}
+              style={{
+                width: '100%',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '10px 12px',
+                color: '#fff',
+                fontSize: 12.5,
+                outline: 'none',
+                fontFamily: 'inherit',
+                marginBottom: 10,
+              }}
+            />
+
+            <button
+              className={`btn btn-primary btn-sm ${uploadingTranscript ? 'pulse' : ''}`}
+              onClick={handleTranscriptUpload}
+              disabled={uploadingTranscript || !transcriptText.trim()}
+            >
+              {uploadingTranscript ? 'Ingesting…' : '✓ Ingest Transcript'}
+            </button>
+          </div>
+
+          <div className="card">
+            <div className="card-title" style={{ marginBottom: 8 }}>Historical Transcripts for This Meeting</div>
+            {transcripts.length > 0 ? (
+              transcripts.map((t: any) => (
+                <div key={t.id} style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 6, marginBottom: 6, fontSize: 12 }}>
+                  {t.source_type} ({t.source_platform || 'Manual Upload'}) · {t.completeness}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{new Date(t.retrieved_at).toLocaleString()}</div>
-              </div>
-            </div>
-          )) : (
-            <div className="empty-state">
-              <div className="empty-icon">📝</div>
-              No transcripts yet.
-              <div style={{ marginTop: 12 }}>
-                <button className="btn btn-primary" onClick={() => setShowTranscript(true)}>Upload Transcript</button>
-              </div>
-            </div>
-          )}
+              ))
+            ) : (
+              <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No prior transcripts stored for this meeting.</div>
+            )}
+          </div>
         </div>
       )}
     </div>

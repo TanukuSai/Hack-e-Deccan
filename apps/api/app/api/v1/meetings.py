@@ -3,7 +3,8 @@ import uuid
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body, UploadFile, File, Form, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from apps.api.app.core.security import get_current_user_id
 from apps.api.app.core.db import get_tenant_session
@@ -13,12 +14,15 @@ from apps.api.app.schemas.meeting import (
 from apps.api.app.services.queue_service import QueueService
 from apps.api.app.services.cost_service import CostService
 from apps.api.app.schemas.outcome import (
-    OutcomeAnalysisRequest, OutcomeAnalysisResponse, FollowUpDraftResponse, FollowUpDraftUpdate
+    OutcomeAnalysisRequest, OutcomeAnalysisResponse, FollowUpDraftResponse, FollowUpDraftUpdate,
+    InterMeetingReportSyncResponse
 )
 from apps.api.app.services.outcome_service import OutcomeService
+from apps.api.app.services.inter_meeting_service import InterMeetingService
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
 outcome_service = OutcomeService()
+inter_meeting_service = InterMeetingService()
 
 @router.post("", response_model=MeetingDetailResponse, status_code=status.HTTP_201_CREATED)
 async def create_meeting(
@@ -379,6 +383,67 @@ async def update_follow_up_draft(
         draft_id=draft_id,
         payload=payload
     )
+
+class InterMeetingReportRequest(BaseModel):
+    report_text: str = Field(..., min_length=5, description="Text describing tasks carried out between meetings")
+    filename: Optional[str] = Field("inter_meeting_task_report.txt", description="Report document filename")
+
+
+@router.get("/{meeting_id}/inter-meeting-context", summary="Get context and candidate reminders between this meeting and prior meeting of same people")
+async def get_inter_meeting_context(
+    meeting_id: UUID,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Finds previous meeting with the same participants and candidate reminders to track.
+    """
+    return await inter_meeting_service.get_inter_meeting_context(
+        user_id=user_id,
+        meeting_id=meeting_id
+    )
+
+
+@router.post("/{meeting_id}/task-report", response_model=InterMeetingReportSyncResponse, summary="Ingest inter-meeting task report (JSON) and sync reminders")
+async def ingest_task_report_json(
+    meeting_id: UUID,
+    payload: InterMeetingReportRequest,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Ingests text report of tasks carried out between 2 meetings of the same people,
+    and synchronizes reminder statuses in database & briefing.
+    """
+    return await inter_meeting_service.sync_task_report(
+        user_id=user_id,
+        meeting_id=meeting_id,
+        report_text=payload.report_text,
+        filename=payload.filename or "inter_meeting_task_report.txt"
+    )
+
+
+@router.post("/{meeting_id}/task-report/upload", response_model=InterMeetingReportSyncResponse, summary="Upload inter-meeting task report file (PDF/DOCX/TXT) and sync reminders")
+async def upload_task_report_file(
+    meeting_id: UUID,
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Uploads a file (PDF, DOCX, TXT, MD) containing tasks carried out between meetings,
+    extracts contents, and synchronizes reminders & briefing.
+    """
+    raw_content = await file.read()
+    file_type = DocumentService.validate_file(raw_content, file.filename or "unknown.txt")
+    extraction = DocumentService.extract_text(raw_content, file_type)
+    text_content = extraction.text
+
+    return await inter_meeting_service.sync_task_report(
+        user_id=user_id,
+        meeting_id=meeting_id,
+        report_text=text_content,
+        filename=file.filename or "inter_meeting_task_report.txt",
+        file_content=raw_content
+    )
+
 
 @router.api_route("/{meeting_id}/follow-up/send", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
 @router.api_route("/{meeting_id}/send-follow-up", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)

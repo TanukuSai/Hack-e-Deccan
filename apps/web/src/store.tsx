@@ -7,6 +7,7 @@ export type Page =
   | 'dashboard'
   | 'meetings'
   | 'briefing'
+  | 'chat'
   | 'contacts'
   | 'projects'
   | 'commitments'
@@ -41,9 +42,10 @@ type Action =
   | { type: 'UPDATE_USER'; user: Partial<UserProfile> };
 
 const storedUser = getStoredUser();
+const savedPage = typeof window !== 'undefined' ? (localStorage.getItem('mpa_active_page') as Page | null) : null;
 
 const initial: State = {
-  page: 'dashboard',
+  page: savedPage || 'chat',
   selectedMeetingId: null,
   toasts: [],
   syncing: false,
@@ -54,6 +56,9 @@ const initial: State = {
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'SET_PAGE':
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('mpa_active_page', action.page);
+      }
       return { ...state, page: action.page, selectedMeetingId: action.meetingId ?? state.selectedMeetingId };
     case 'SELECT_MEETING':
       return { ...state, selectedMeetingId: action.id };

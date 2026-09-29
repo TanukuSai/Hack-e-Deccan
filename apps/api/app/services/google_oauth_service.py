@@ -87,21 +87,48 @@ class GoogleOAuthService:
         self._load_client_credentials()
 
     def _load_client_credentials(self):
-        if self.client_file.exists():
-            try:
-                with open(self.client_file, "r") as f:
-                    data = json.load(f)
-                    web = data.get("web", {})
-                    self.client_id = web.get("client_id", "")
-                    self.client_secret = web.get("client_secret", "")
-                    self.auth_uri = web.get("auth_uri", self.auth_uri)
-                    self.token_uri = web.get("token_uri", self.token_uri)
-                    return
-            except Exception as e:
-                logger.warning(f"Failed to read client credentials file: {e}")
+        # Candidate file paths to discover
+        candidates = [
+            self.client_file,
+            Path(os.getenv("GOOGLE_CLIENT_SECRET_FILE", "client_secret.json")),
+            Path("client_secret.json"),
+            Path("../client_secret.json"),
+            Path("../../client_secret.json"),
+        ]
+        # Also check for any client_secret*.json pattern in current or parent dirs
+        for search_dir in [Path("."), Path(".."), Path("../..")]:
+            if search_dir.exists():
+                try:
+                    candidates.extend(list(search_dir.glob("client_secret*.json")))
+                except Exception:
+                    pass
 
+        for cand in candidates:
+            if cand and cand.exists() and cand.is_file():
+                try:
+                    with open(cand, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        web = data.get("web", {})
+                        cid = web.get("client_id", "")
+                        csec = web.get("client_secret", "")
+                        if cid:
+                            self.client_id = cid
+                            self.client_secret = csec
+                            self.auth_uri = web.get("auth_uri", self.auth_uri)
+                            self.token_uri = web.get("token_uri", self.token_uri)
+                            self.client_file = cand
+                            logger.info(f"Loaded Google OAuth credentials from {cand} (client_id: {self.client_id[:12]}...)")
+                            return
+                except Exception as e:
+                    logger.warning(f"Failed to read client credentials from {cand}: {e}")
+
+        # Fallback to environment variables
         self.client_id = os.getenv("GOOGLE_CLIENT_ID", "")
         self.client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
+        # Log if credentials are missing
+        if not self.client_id:
+            logger.info("Google OAuth client credentials not configured via client_secret.json or environment variables.")
 
     def get_authorization_url(
         self,

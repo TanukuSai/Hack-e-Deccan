@@ -9,10 +9,15 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [devEmail, setDevEmail] = useState('');
   const [showDevCustom, setShowDevCustom] = useState(false);
+  const [showOAuthHelp, setShowOAuthHelp] = useState(false);
+
+  const activeRedirectUri = `${window.location.origin}/auth/google/callback`;
+  const defaultClientId = '22523507322-rp2pon0qpqe05o1jgd1fa6hro5ppe4a7.apps.googleusercontent.com';
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || defaultClientId;
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    const redirectUri = `${window.location.origin}/auth/google/callback`;
+    const redirectUri = activeRedirectUri;
     const state = Math.random().toString(36).substring(2, 15);
     sessionStorage.setItem('oauth_state', state);
 
@@ -22,7 +27,7 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
         window.location.href = res.authorization_url;
       }
     } catch {
-      toast('Redirecting to Google OAuth...', 'info', '🔗');
+      toast('Opening Google OAuth consent...', 'info', '🔗');
       // Direct fallback to Google OAuth endpoint if backend route is slow
       const scopes = [
         'openid',
@@ -35,7 +40,6 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
           'https://www.googleapis.com/auth/documents.readonly'
         );
       }
-      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id.apps.googleusercontent.com';
       const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes.join(' '))}&access_type=offline&prompt=consent&state=${state}`;
       window.location.href = authUrl;
     } finally {
@@ -73,6 +77,11 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
     }
   };
 
+  const handleCopyUri = () => {
+    navigator.clipboard.writeText(activeRedirectUri);
+    toast('Copied Redirect URI to clipboard', 'success', '📋');
+  };
+
   return (
     <div style={{
       position: 'fixed',
@@ -86,27 +95,50 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
       padding: 16
     }}>
       <div className="card fade-in" style={{
-        maxWidth: 520,
+        maxWidth: 540,
         width: '100%',
         background: 'var(--surface-primary)',
         borderColor: 'rgba(99, 102, 241, 0.35)',
         boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6), 0 0 32px rgba(99, 102, 241, 0.15)',
         padding: 32,
         borderRadius: 16,
+        position: 'relative',
       }}>
+        {/* Close Button */}
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            style={{
+              position: 'absolute',
+              top: 18,
+              right: 18,
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 18,
+              cursor: 'pointer',
+              padding: '4px 8px',
+              borderRadius: 6,
+            }}
+            title="Close"
+          >
+            ✕
+          </button>
+        )}
+
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 56,
-            height: 56,
+            width: 52,
+            height: 52,
             borderRadius: 14,
             background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2))',
             border: '1px solid rgba(99, 102, 241, 0.4)',
-            fontSize: 28,
-            marginBottom: 14,
+            fontSize: 26,
+            marginBottom: 12,
           }}>
             ✦
           </div>
@@ -114,7 +146,7 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
             Meeting Prep Agent
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-            Autonomous intelligence briefings & decision tracking
+            Autonomous intelligence briefings, reminder tracking & inter-meeting sync
           </div>
         </div>
 
@@ -123,14 +155,14 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
           background: 'rgba(255, 255, 255, 0.03)',
           border: '1px solid var(--border)',
           borderRadius: 10,
-          padding: 16,
-          marginBottom: 20,
+          padding: 14,
+          marginBottom: 16,
           fontSize: 12,
         }}>
           <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>🔒</span> Permissions & Access
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-secondary)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, color: 'var(--text-secondary)' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <span style={{ color: 'var(--success)' }}>✓</span>
               <div>
@@ -151,8 +183,8 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            marginTop: 12,
-            paddingTop: 10,
+            marginTop: 10,
+            paddingTop: 8,
             borderTop: '1px solid var(--border)',
             cursor: 'pointer',
             fontWeight: 600,
@@ -169,7 +201,7 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
         </div>
 
         {/* Action Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button
             className="btn btn-primary"
             onClick={handleGoogleSignIn}
@@ -193,10 +225,10 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
             {loading ? 'Connecting...' : 'Sign in with Google'}
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '2px 0' }}>
             <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
             <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              or quick evaluation
+              instant test sign-in
             </span>
             <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
@@ -212,17 +244,26 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
               background: 'rgba(255, 255, 255, 0.04)',
             }}
           >
-            ⚡ One-Click Demo Executive Login
+            ⚡ One-Click Demo Executive Login (Alex Mercer)
           </button>
 
           {!showDevCustom ? (
-            <button
-              className="btn btn-ghost"
-              onClick={() => setShowDevCustom(true)}
-              style={{ fontSize: 11, color: 'var(--text-muted)', padding: 4 }}
-            >
-              Custom test email…
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setShowDevCustom(true)}
+                style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 4px' }}
+              >
+                Custom test email…
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setShowOAuthHelp(v => !v)}
+                style={{ fontSize: 11, color: 'var(--indigo)', padding: '2px 4px' }}
+              >
+                {showOAuthHelp ? 'Hide OAuth Help ▲' : 'OAuth Error Troubleshooting ▼'}
+              </button>
+            </div>
           ) : (
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <input
@@ -247,6 +288,40 @@ export default function AuthModal({ onDismiss }: { onDismiss?: () => void }) {
               >
                 Go
               </button>
+            </div>
+          )}
+
+          {/* OAuth Troubleshooting & Redirect URI Info */}
+          {showOAuthHelp && (
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.06)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: 11,
+              marginTop: 4,
+            }}>
+              <div style={{ fontWeight: 700, color: 'var(--rose)', marginBottom: 4 }}>
+                Resolving Error 400: redirect_uri_mismatch
+              </div>
+              <div style={{ color: 'var(--text-secondary)', marginBottom: 6 }}>
+                Google blocks OAuth requests if the exact redirect URL isn't pre-registered in Google Cloud Console.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.3)', padding: '6px 8px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeRedirectUri}</span>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleCopyUri}
+                  style={{ fontSize: 10, padding: '2px 6px', color: 'var(--primary)' }}
+                >
+                  Copy
+                </button>
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 10, marginTop: 6 }}>
+                1. Go to Google Cloud Console → APIs & Services → Credentials.<br/>
+                2. Click your OAuth 2.0 Web Client ID.<br/>
+                3. Under <strong>Authorized redirect URIs</strong>, add <code>{activeRedirectUri}</code> and save.
+              </div>
             </div>
           )}
         </div>
