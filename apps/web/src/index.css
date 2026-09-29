@@ -318,6 +318,9 @@ button, input, select, textarea {
   flex-direction: column;
   gap: 22px;
 }
+.page-body > * {
+  flex-shrink: 0;
+}
 
 /* ─── Buttons ────────────────────────────────────────────── */
 .btn {
@@ -425,6 +428,8 @@ button, input, select, textarea {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
+  min-height: 140px;
 }
 .hero-next-meeting::before {
   content: '';

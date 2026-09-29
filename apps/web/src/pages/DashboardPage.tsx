@@ -224,7 +224,7 @@ export default function DashboardPage() {
 
       {/* ── 1. WHAT IS COMING UP? -> Hero Next Meeting Banner ── */}
       {nextMeeting && (
-        <div className="hero-next-meeting">
+        <div className="hero-next-meeting" style={{ flexShrink: 0 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="hero-badge-strip">
               <span className="badge badge-ready">✦ Next Meeting</span>
